@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Build artifacts
+obj/
+*.bit
+*.jou
+*.log
+*.rpt
+
+# Simulation outputs
+sim_build*/
+sim/sim_build/
+*.vvp
+*.fst
+results.xml
+cocotb_iverilog_dump.v
+cmds.f
+
+# Generated data
+*.mem
+a.out
