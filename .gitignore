@@ -23,3 +23,6 @@ cmds.f
 # Generated data
 *.mem
 a.out
+
+# Local history artifacts
+_history/
