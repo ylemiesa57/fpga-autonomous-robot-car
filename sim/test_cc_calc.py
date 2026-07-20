@@ -35,7 +35,8 @@ def test_cc_calc_runner():
     sys.path.append(str(proj_path / "sim" / "model"))
     # These are the Verilog source files to be compiled
     sources = [
-        proj_path / "hdl" / "cc_calc.sv",
+        proj_path / "hdl" / "ccl_calc.sv",
+        proj_path / "hdl" / "divider.sv",
     ]
     build_test_args = ["-Wall"]
     # These are the parameters we are passing to the DUT
