@@ -1,17 +1,17 @@
- """End-to-end BEV remap regression for the warp pipeline.
- 
- This test streams a synthetic ROI BRAM pattern through the BEV warp logic,
- exercises two LUTs (identity and flipped), and sprinkles random back-pressure
- to make sure AXI-Stream handshakes are robust. Environment variables such as
- BEV_HRES/BEV_VRES, STALL_PROB, and CASES let CI scale coverage up or down
- without changing the test code.
- """
- import os
- import sys
- import random
- from pathlib import Path
- from typing import Callable, Iterable, Tuple
- from collections import deque
+"""End-to-end BEV remap regression for the warp pipeline.
+
+This test streams a synthetic ROI BRAM pattern through the BEV warp logic,
+exercises two LUTs (identity and flipped), and sprinkles random back-pressure
+to make sure AXI-Stream handshakes are robust. Environment variables such as
+BEV_HRES/BEV_VRES, STALL_PROB, and CASES let CI scale coverage up or down
+without changing the test code.
+"""
+import os
+import sys
+import random
+from pathlib import Path
+from typing import Callable, Iterable, Tuple
+from collections import deque
 
 import cocotb
 from cocotb.clock import Clock
