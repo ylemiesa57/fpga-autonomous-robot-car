@@ -1,4 +1,4 @@
-# Simulation status (as of 2026-07-21)
+# Simulation status (as of 2026-07-22)
 
 Ran the full cocotb test suite in `sim/` for the first time end-to-end (previous
 automated passes only ever got as far as installing the toolchain and running one
@@ -36,11 +36,19 @@ Ran every `sim/test_*.py` directly (`python3 sim/test_X.py`). Results:
 | `test_cle_8conn.py` | 1/8 PASS (`test_all_background`), 7 FAIL -- every foreground pixel comes back with label 0, even the very first pixel in `test_single_pixel`. Same flavor of bug as `test_ccl_8conn.py`, in the standalone `hdl/cle_module_8conn.sv` variant. |
 | `test_bev.py` | Was **not runnable at all** -- the whole file had every line of the leading docstring + import block indented by one stray space, an `IndentationError` at the module's first line. Fixed in this pass (just removed the stray leading space, no logic touched). Now runs and reports a genuine functional failure: `test_warping_logic` fails with "Output stream does not match expected mapping" against `hdl/perspective.sv`. Not investigated further. |
 | `test_lane_pair_filter.py` | **FAIL to even start** -- `AttributeError: lane_pair_filter contains no object named blob_x0`. The test drives signals `blob_x0..3`, but the actual RTL (`hdl/lane_pair_filter.sv`) exposes `cc_valid`, `cc_x[3:0]`, `cc_y[3:0]`, `cc_pixels[3:0]` -- a completely different, array-based port interface. This test looks like it was written against an earlier version of the module and never updated; fixing it means rewriting the drive/collect logic around the current array ports, which is more than a small fix. |
-| `test_cle_stress.py`, `test_lane_pipeline.py`, `test_roi.py` | Not run this pass -- `test_roi.py` in particular streams a full frame and didn't finish within this tool's ~40s-per-call budget in an earlier attempt. Worth revisiting with more time budgeted per call. |
+| `test_cle_stress.py` | **PASS** (3/3: `test_saturation_many_singletons`, `test_diagonal_islands_merge`, `test_sparse_noise_under_limit`). Standalone `cle_module_8conn` holds up under the stress patterns this file targets, unlike the plain unit test above -- consistent with `test_ccl_8conn.py`/`test_cle_8conn.py`'s failures needing denser/multi-frame patterns to surface. |
+| `test_lane_pipeline.py` | **FAIL** -- `test_two_blobs_with_noise` asserts `valid_midpoints` should go high even with salt-and-pepper noise present; DUT reports `lane_valid=0000` for the whole run, so no midpoint is ever asserted. This exercises the full pipeline (`cle_module_8conn` -> `ccl_calc` -> `lane_pair_filter` -> `divider`), so it's consistent with (and doesn't add new information beyond) the CCL/CLE label bugs and the `lane_pair_filter` interface mismatch already documented above -- likely just another symptom of those, not a fourth independent bug. |
+| `test_roi.py` | Still not run to completion -- streams a full 1280x720 frame and backgrounding it across tool calls doesn't work in this sandbox (each shell call is its own subprocess; the background process is gone by the next call even though the filesystem persists). Would need either a single call with a much larger time budget, or running it outside this scheduled-task tool entirely. |
 
 ## Takeaway
 
 Several of the CCL/CLE and BEV/lane-pairing block-level tests are currently
 failing for what look like genuine RTL or test-vs-interface issues, not flaky
-setup problems. Worth a closer look when there's time to actually dig into the
-union-find/label-equivalence logic and the lane-pairing interface history.
+setup problems. `test_cle_stress.py` passing while `test_ccl_8conn.py`/
+`test_cle_8conn.py` fail suggests the union-find/label-equivalence bug is
+pattern-density-dependent rather than universal. `test_lane_pipeline.py`'s
+failure looks like it's downstream of the already-documented CCL/CLE and
+lane_pair_filter issues rather than a separate bug. Worth a closer look when
+there's time to actually dig into the union-find/label-equivalence logic and
+the lane-pairing interface history. `test_roi.py` still needs a run with a
+much larger time budget than this tool's per-call limit allows.
