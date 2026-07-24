@@ -52,3 +52,47 @@ lane_pair_filter issues rather than a separate bug. Worth a closer look when
 there's time to actually dig into the union-find/label-equivalence logic and
 the lane-pairing interface history. `test_roi.py` still needs a run with a
 much larger time budget than this tool's per-call limit allows.
+
+## Update 2026-07-24: root cause found for the CCL/CLE "label 0" and label-inconsistency failures
+
+Traced this all the way through instead of just re-confirming the symptom. Root cause is a genuine
+address-space collision, not a logic typo, and it explains every symptom documented above at once:
+
+**The bug:** `cle_module_8conn.sv`'s single BRAM (`label_table_bram`) is used for two unrelated purposes
+that share the same address space with no separation:
+1. **Pixel-address space** (Pass 1 main write, Pass 2 initial read): `addr = pixel_idx` (0..`MEM_DEPTH-1`),
+   storing "this pixel's assigned label."
+2. **Label space** (union-find parent pointers, written in `RESOLVE_MERGE`, read while tracing roots in
+   `RESOLVE_FIND_A/B` and `P2_TRAVERSE`): `addr = <a label value>` (1..`next_new_label-1`), storing "this
+   label's parent label."
+
+Both use the exact same `addr_a`/`addr_b` and the exact same underlying BRAM entries. Since labels are
+small sequential integers starting at 1, `addr = <label N>` is numerically indistinguishable from
+`addr = <pixel index N>` — reading "what is label 1's parent?" and reading "what is pixel 1's assigned
+label?" hit the identical BRAM entry. Confirmed by instrumenting/reproducing: in `test_single_pixel`
+(single FG pixel at pixel_idx 0, label 1 assigned), Pass 2 first reads `addr=0` (pixel space, correctly
+gets label `1`), then — per the current code — treats that `1` as an address and reads `addr=1`. Address 1
+is *also* a real pixel (pixel index 1, i.e. (1,0)), which is background and was written with label `0`
+during Pass 1. `P2_TRAVERSE`'s termination check (`parent_label == addr_b || parent_label == '0`) sees the
+stray `0` from that unrelated background pixel's entry and incorrectly treats it as "root found, label 0,"
+which is exactly the observed bug. The same aliasing explains `test_ccl_8conn.py`'s "label inconsistency"
+failures on denser patterns: two different pixels can resolve through different accidental collisions and
+land on different final labels for what should be the same component, since the "root" they converge on
+depends on whatever unrelated pixel happens to occupy the aliased address, not on any real union-find
+structure. `hdl/ccl_8conn.sv`'s two-pass CCL uses the same BRAM-address-as-label-index pattern (confirmed
+by inspection — same `addr_a <= root_b` / `din_a <= {root_a, ...}` shape in its merge logic) and is very
+likely hitting the identical bug, though not independently re-traced pixel-by-pixel.
+
+**Why not fixed in this pass:** the correct fix is to give label-space lookups their own address range
+(e.g. offset every label-space `addr_a`/`addr_b` by `MEM_DEPTH`, size the BRAM to `2*MEM_DEPTH` deep, and
+widen `ADDR_BITS` accordingly) rather than a one-line patch — and because the current code reuses `addr_b`
+itself as the "is this a self-loop / root" comparison value (`parent_a == addr_b`), decoupling the two
+address spaces means introducing a separate "label currently being traced" signal so that comparison still
+means the same thing once addresses are offset. That's edits across `RESOLVE_INIT`, `RESOLVE_FIND_A`,
+`RESOLVE_CHECK_A`, `RESOLVE_FIND_B`, `RESOLVE_CHECK_B`, `RESOLVE_MERGE`, and `P2_TRAVERSE` (and the
+equivalent states in `ccl_8conn.sv`), touching core FSM control flow in a module with no independent
+formal/hardware verification available in this sandbox beyond cocotb simulation. That crosses the line
+from "small, confidently verifiable fix" into a real redesign of the label-storage scheme, so it wasn't
+attempted blind in an unsupervised run — flagging with the exact mechanism instead so the actual fix (in
+both `cle_module_8conn.sv` and `ccl_8conn.sv`) can be scoped and reviewed properly, ideally with a
+dedicated session rather than folded into the daily rotation.
