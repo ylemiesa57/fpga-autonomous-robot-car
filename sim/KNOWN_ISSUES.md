@@ -96,3 +96,45 @@ from "small, confidently verifiable fix" into a real redesign of the label-stora
 attempted blind in an unsupervised run — flagging with the exact mechanism instead so the actual fix (in
 both `cle_module_8conn.sv` and `ccl_8conn.sv`) can be scoped and reviewed properly, ideally with a
 dedicated session rather than folded into the daily rotation.
+
+## Update 2026-08-01: the ccl_8conn.sv address-aliasing theory doesn't hold up
+
+Re-read `hdl/ccl_8conn.sv` in full to independently re-trace the "very likely hitting
+the identical bug" claim from the 07-24 update above, instead of leaving it
+unconfirmed. It does not hold up on closer reading: `ccl_8conn.sv` is a genuinely
+different, more careful design from `cle_module_8conn.sv`, not just a superficial
+match on `addr_a <= root_b` / `din_a <= {root_a, ...}` shape.
+
+The module's own header comment says as much (`BRAM stores parent ADDRESSES (not
+compact labels)` / `A root pixel stores its own address: BRAM[addr] = addr`) - unlike
+`cle_module_8conn.sv`, there is only one address space here. Parent pointers *are*
+literal pixel addresses throughout Pass 1's union-find (`RESOLVE_INIT` through
+`RESOLVE_MERGE`) and Pass 2's root-chase (`P2_READ` through `P2_TRAVERSE`), so there's
+no pixel-space-vs-label-space collision to alias against. Staleness (distinguishing "a
+previous frame wrote this BRAM entry" from "this frame hasn't touched it yet, treat it
+as its own root") is instead handled with an explicit 2-bit generation tag
+(`GEN_BITS`/`curr_generation`, stored alongside every parent pointer and compared on
+every read) rather than by re-purposing `BG_MARKER`/address collisions the way
+`cle_module_8conn.sv` does. So the specific address-aliasing bug documented above for
+`cle_module_8conn.sv` does not apply to this module - that part of the 07-24 note was
+a reasonable hypothesis from the code shape alone, but not correct once you read past
+the merge/traverse states into how staleness is actually tracked.
+
+That doesn't mean `ccl_8conn.sv` is bug-free - `test_ccl_8conn.py` genuinely fails 4/12
+(`test_chessboard`, `test_vertical_stripes`, `test_labyrinth`,
+`test_randomized_multi_frame`, per the run documented above), so there's a real,
+separate bug here worth finding. One concrete lead worth checking first, noticed while
+reading the generation logic: `GEN_BITS = 2` gives only 4 distinct generation values
+(1, 2, 3, 0, 1, 2, 3, 0, ...), and `curr_generation` increments once per frame with no
+special-case at the wraparound (`curr_generation <= curr_generation + 1'b1`). Any BRAM
+entry that goes 4 frames without being rewritten would have its stale generation tag
+alias back onto the current one and get misread as fresh, current-frame data instead
+of stale/background - which would line up with `test_randomized_multi_frame` in
+particular. This wouldn't explain the three single-frame failures on its own though
+(`test_chessboard`/`test_vertical_stripes`/`test_labyrinth` are dense-pattern, not
+multi-frame, per their names), so there's likely still a second, independent bug for
+those - not traced further this pass. No RTL toolchain (`iverilog`/`cocotb`) was set
+up in this pass to actually re-run the suite and confirm either lead against real
+simulation output; this is a static-reading correction and a new lead, not a
+verified fix - flagging both for whoever picks this up next rather than guessing at a
+patch for either without being able to run it.
