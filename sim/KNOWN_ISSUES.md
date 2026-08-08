@@ -138,3 +138,46 @@ up in this pass to actually re-run the suite and confirm either lead against rea
 simulation output; this is a static-reading correction and a new lead, not a
 verified fix - flagging both for whoever picks this up next rather than guessing at a
 patch for either without being able to run it.
+
+## Update 2026-08-08: GEN_BITS wraparound theory empirically ruled out for `ccl_8conn.sv`
+
+Got the RTL toolchain running this pass (`iverilog` 11.0 installed from the `.deb`
+per the instructions above, `cocotb<2.0`) and actually tested the 07-24/08-01
+`GEN_BITS=2` wraparound hypothesis instead of leaving it as an untested lead.
+
+First reran `sim/test_ccl_8conn.py` unmodified to confirm the documented baseline
+still holds: 8/12 pass, same 4 failures as every prior run
+(`test_chessboard`, `test_vertical_stripes`, `test_labyrinth`,
+`test_randomized_multi_frame`), all "Label inconsistency" assertion failures.
+
+Then reran with `GEN_BITS` overridden to 4 (16 distinct generation values instead
+of 4) via the test runner's `parameters` dict — `GEN_BITS` is a genuinely free
+module parameter here (`ENTRY_WIDTH = ADDR_BITS + GEN_BITS`, BRAM sizes to it
+automatically), so this is a clean, non-invasive way to test the theory without
+touching FSM logic. If the 08-01 wraparound theory were the (or a) cause,
+`test_randomized_multi_frame` — the one test the theory specifically targeted —
+should pass or at least change behavior with 4x more headroom before a stale
+generation tag could alias back onto the current one over the same 10-frame run.
+
+It didn't: identical 8/12 result, same 4 tests failing, `test_randomized_multi_frame`
+still fails on `random_frame_2` (frame 2 of 10 — nowhere near enough frames for
+even 4 generation values, let alone 16, to wrap around). This rules out generation
+aliasing as the cause for `test_randomized_multi_frame`, not just for the three
+single-frame pattern tests the 08-01 note already excluded it from. All 4 failures
+now look like symptoms of one shared root cause — most likely the union-find/
+label-equivalence bug in the merge logic itself, given that all 4 failing tests are
+specifically the denser/multi-component patterns (chessboard, vertical stripes,
+a labyrinth maze, and randomized frames with multiple blobs) while every simple
+low-component-count test (`test_single_pixel`, `test_diagonal_bridge`,
+`test_cross_shape`, `test_two_separate_blobs`, `test_t_shape`,
+`test_horizontal_stripes`) passes clean. Reverted the `GEN_BITS=4` test-runner
+change after confirming (no source or test file changes kept — this pass only adds
+this documentation update).
+
+**Still not attempted:** actually tracing the union-find merge/resolve FSM
+(`RESOLVE_INIT` through `RESOLVE_MERGE`, `P2_TRAVERSE`) step-by-step against a
+failing multi-component case like `test_chessboard` to find the real bug. That's a
+genuine FSM logic trace, not a parameter experiment, and deserves a dedicated
+session rather than being squeezed into a daily rotation slot — flagging the
+narrowed-down lead (single shared root cause, density/component-count dependent,
+not generation-related) for whoever picks this up next.
