@@ -38,7 +38,7 @@ Ran every `sim/test_*.py` directly (`python3 sim/test_X.py`). Results:
 | `test_lane_pair_filter.py` | **FAIL to even start** -- `AttributeError: lane_pair_filter contains no object named blob_x0`. The test drives signals `blob_x0..3`, but the actual RTL (`hdl/lane_pair_filter.sv`) exposes `cc_valid`, `cc_x[3:0]`, `cc_y[3:0]`, `cc_pixels[3:0]` -- a completely different, array-based port interface. This test looks like it was written against an earlier version of the module and never updated; fixing it means rewriting the drive/collect logic around the current array ports, which is more than a small fix. |
 | `test_cle_stress.py` | **PASS** (3/3: `test_saturation_many_singletons`, `test_diagonal_islands_merge`, `test_sparse_noise_under_limit`). Standalone `cle_module_8conn` holds up under the stress patterns this file targets, unlike the plain unit test above -- consistent with `test_ccl_8conn.py`/`test_cle_8conn.py`'s failures needing denser/multi-frame patterns to surface. |
 | `test_lane_pipeline.py` | **FAIL** -- `test_two_blobs_with_noise` asserts `valid_midpoints` should go high even with salt-and-pepper noise present; DUT reports `lane_valid=0000` for the whole run, so no midpoint is ever asserted. This exercises the full pipeline (`cle_module_8conn` -> `ccl_calc` -> `lane_pair_filter` -> `divider`), so it's consistent with (and doesn't add new information beyond) the CCL/CLE label bugs and the `lane_pair_filter` interface mismatch already documented above -- likely just another symptom of those, not a fourth independent bug. |
-| `test_roi.py` | Still not run to completion -- streams a full 1280x720 frame and backgrounding it across tool calls doesn't work in this sandbox (each shell call is its own subprocess; the background process is gone by the next call even though the filesystem persists). Would need either a single call with a much larger time budget, or running it outside this scheduled-task tool entirely. |
+| `test_roi.py` | **PASS** (ran to completion this pass, ~137s real time in a single call with a larger time budget instead of backgrounding across calls) -- streams the full 1280x720 frame through `region_of_interest`, no assertion failures. Per its own docstring the test only drives realistic coordinates and logs progress rather than checking output content in detail ("a bring-up harness for future assertions"), so a clean pass here confirms the interface holds up under full-frame throughput, not that ROI's cropping output is pixel-verified. |
 
 ## Takeaway
 
@@ -181,3 +181,13 @@ genuine FSM logic trace, not a parameter experiment, and deserves a dedicated
 session rather than being squeezed into a daily rotation slot — flagging the
 narrowed-down lead (single shared root cause, density/component-count dependent,
 not generation-related) for whoever picks this up next.
+
+## Update 2026-08-11: `test_roi.py` run to completion
+
+Previous passes couldn't finish this test because backgrounding a long-running process
+doesn't survive across this tool's separate per-call subprocess boundary. Ran it in a
+single call with a larger time budget instead (iverilog 11.0 from the `.deb`, `cocotb<2.0`,
+same toolchain setup as documented above) and it completed in ~137s real time, passing
+cleanly. Table above updated. No RTL or test changes made -- this only closes out the
+"couldn't even run it" gap, it doesn't add new content-level assertions to the test itself
+(see the row above for what the test does and doesn't check).
