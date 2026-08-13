@@ -191,3 +191,36 @@ same toolchain setup as documented above) and it completed in ~137s real time, p
 cleanly. Table above updated. No RTL or test changes made -- this only closes out the
 "couldn't even run it" gap, it doesn't add new content-level assertions to the test itself
 (see the row above for what the test does and doesn't check).
+
+## Update 2026-08-13: `ccl_calc.sv` divider-threshold fix confirmed passing; `test_lane_pair_filter.py` interface fix leaves a real failure exposed
+
+Two changes landed in this pass, verified independently against the documented toolchain
+(iverilog 11.0 from the `.deb`, `cocotb<2.0`) rather than taking the commit's own description
+on faith:
+
+**`hdl/ccl_calc.sv` — divider kick-off threshold fix: CONFIRMED PASSING.** The divider
+kick-off logic only ran for blobs with `pixel_tally[i] > 10`, while the final validity check
+required only `> 5` — so `cc_valid_out` could never assert for blobs in the 6-10 pixel range,
+exactly the size the test data uses. Lowered the divider threshold to `> 5` to match. Reran
+`sim/test_ccl_calc.py` after the fix: `test_cc_calculations_basic` now **PASSES**
+(`Final cc_valid_out flags: 0101`, nonzero — previously documented above as `FAIL`, all-zero
+flags). This resolves the `test_ccl_calc.py` row in the table above from FAIL to PASS.
+
+**`sim/test_lane_pair_filter.py` — interface rewrite: PARTIAL, does not fully resolve the
+FAIL row above.** The test previously couldn't even start (`AttributeError: lane_pair_filter
+contains no object named blob_x0`) because it drove nonexistent signals against a module that
+actually exposes `cc_valid[3:0]`/`cc_x[3:0]`/`cc_y[3:0]`/`cc_pixels[3:0]`. The rewrite fixes
+that — the test now compiles and runs against the real port interface, confirmed by rerunning
+it after the change. However, rerunning also shows `test_basic_pairing` now reaches and fails
+a real assertion instead of crashing before one: `assert got_valid, "Expected a valid lane
+pair"` fails with `valid=0 left=0 right=0` at 270ns. So this pass turned an uninformative
+interface-mismatch crash into a genuine, reproducible functional failure — real progress, but
+the table row above should read as "interface fixed, functional bug still open" rather than
+"fixed." Not investigated further this pass (would need tracing `lane_pair_filter.sv`'s actual
+pairing logic against the new test stimulus, which is a fresh investigation, not a quick
+follow-up).
+
+Flagging this discrepancy explicitly because the commit that made these two changes reported
+both as verified/fixed without rerunning `test_lane_pair_filter.py` after the interface
+rewrite to check for exactly this — worth double-checking future passes' self-reported
+verification against an independent rerun before taking "tests pass" at face value.
