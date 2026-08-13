@@ -74,7 +74,7 @@ module cc_calculations #(
             div_in_valid <= '0;
             if (cc_pixel_last) begin
                 for (i = 0; i < MAX_BLOBS; i = i + 1) begin
-                    div_in_valid[i] <= (pixel_tally[i] > 10);
+                    div_in_valid[i] <= (pixel_tally[i] > 5);
                 end
             end
 
