@@ -224,3 +224,19 @@ Flagging this discrepancy explicitly because the commit that made these two chan
 both as verified/fixed without rerunning `test_lane_pair_filter.py` after the interface
 rewrite to check for exactly this — worth double-checking future passes' self-reported
 verification against an independent rerun before taking "tests pass" at face value.
+
+## Update 2026-08-15: `test_lane_pair_filter.py` functional failure resolved; independently reconfirmed
+
+The `test_basic_pairing` assertion failure documented above (08-13 entry) is now fixed.
+Root cause: the RTL's default `WIDTH=706` parameter (`MID_H=353`) placed all three test
+blobs (x=20, x=140, x=50) on the same (left) side of the frame, so `lane_pair_filter`
+never saw both a left and a right blob and `valid_midpoints` stayed low. Fix marks the
+redundant third blob invalid and overrides `WIDTH=280` (`MID_H=140`) in the test runner so
+blob 0 (x=20) lands left and blob 1 (x=140) lands right, matching what the test's own
+assertions expect.
+
+Independently reconfirmed by rerunning `python3 sim/test_lane_pair_filter.py` against the
+documented toolchain (iverilog 11.0 from the `.deb`, cocotb 1.9.2) rather than taking the
+commit description on faith, consistent with this file's own standing practice since the
+08-13 entry: `test_basic_pairing` **PASSES** (`valid=1 left=20 right=140` at 60ns). This
+closes out the `test_lane_pair_filter.py` row from the original table as fully resolved.
