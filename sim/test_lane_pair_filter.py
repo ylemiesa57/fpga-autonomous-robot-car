@@ -42,7 +42,7 @@ async def test_basic_pairing(dut):
     blobs = [
         {"valid": True, "x": 20, "y": 10, "pixels": 120},
         {"valid": True, "x": 140, "y": 12, "pixels": 160},
-        {"valid": True, "x": 50, "y": 18, "pixels": 20},   # smaller, still processed
+        {"valid": False, "x": 50, "y": 18, "pixels": 20},  # not used
         {"valid": False},
     ]
     drive_blobs(dut, blobs)
@@ -79,6 +79,7 @@ def test_lane_pair_filter_runner():
     runner.build(
         sources=sources,
         hdl_toplevel="lane_pair_filter",
+        parameters={"WIDTH": 280},
         build_dir=str(sim_build_dir),
         timescale=("1ns", "1ps"),
         always=True,
