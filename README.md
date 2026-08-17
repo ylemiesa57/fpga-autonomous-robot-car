@@ -16,9 +16,26 @@ End-to-end FPGA pipeline for real-time lane detection, centroiding, and HDMI ove
 4. Lane pairing: selects dominant blobs per side and computes midpoints.
 5. Overlay: HDMI output with left/right/midpoint indicators.
 
+## Simulation status and debugging log
+
+Block-level cocotb testbenches live in `sim/`. Current pass/fail state for every
+test, the toolchain setup that makes them runnable without root, and the
+investigation history behind the trickier failures are tracked in
+[`sim/KNOWN_ISSUES.md`](sim/KNOWN_ISSUES.md).
+
+That file is kept as a working engineering log rather than a summary, so it
+records theories that turned out to be wrong as well as the fixes that landed.
+For example, the `ccl_8conn.sv` address-aliasing theory and the `GEN_BITS`
+wraparound theory were both empirically ruled out, and the real cause of
+`cc_valid_out` never asserting for small blobs turned out to be a threshold
+mismatch in `ccl_calc.sv`, where the divider kick-off required a blob larger
+than the validity check did.
+
 ## Repo layout
 - `hdl/` - SystemVerilog RTL, including CCL, centroid, lane pairing, HDMI output.
-- `sim/` - cocotb tests and simulation helpers.
+- `sim/` - cocotb tests and simulation helpers, plus
+  [`sim/KNOWN_ISSUES.md`](sim/KNOWN_ISSUES.md): a running log of simulation
+  status, root-cause investigations, and theories tested and ruled out.
 - `data/` - memory init files (if used).
 - `xdc/` - pin constraints.
 - `build.tcl` - Vivado build script (synth -> place -> route -> bitstream).
