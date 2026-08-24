@@ -54,8 +54,8 @@ Build outputs land in `obj/` (ignored by git).
 This repo uses cocotb + iverilog for several block-level tests.
 
 ```bash
-# Example: run cocotb tests (set up your Python venv first)
-python -m pytest sim/test_lane_pipeline.py
+# Example: run a cocotb test (see sim/KNOWN_ISSUES.md for toolchain setup)
+python sim/test_lane_pipeline.py
 ```
 
 ## Hardware
